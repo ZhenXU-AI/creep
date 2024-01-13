@@ -1,0 +1,159 @@
+import pandas as pd  
+import numpy as np  
+import math   
+from sklearn.model_selection import train_test_split  
+from sklearn.preprocessing import MinMaxScaler  
+from sklearn.preprocessing import StandardScaler  
+from sklearn.manifold import TSNE  
+from sklearn.decomposition import PCA  
+import matplotlib.pyplot as plt  
+plt.rcParams['font.sans-serif'] = ['SimHei']  
+plt.rcParams['axes.unicode_minus'] = False  
+from sklearn.model_selection import GridSearchCV 
+from sklearn.model_selection import RandomizedSearchCV 
+
+
+
+
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RationalQuadratic, WhiteKernel, RBF
+from sklearn.gaussian_process.kernels import ConstantKernel as C
+
+from sklearn.svm import SVR
+
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.linear_model import Lasso
+
+from sklearn.linear_model import Ridge
+
+from sklearn.linear_model import SGDRegressor
+
+from sklearn.neural_network import  MLPRegressor
+
+
+from sklearn.metrics import mean_squared_error 
+from sklearn.metrics import mean_absolute_error 
+from sklearn.metrics import r2_score 
+from sklearn.metrics import mean_absolute_percentage_error
+
+df = pd.read_excel("F:/JupyterXU/all_machine_learning_data/test_data-creep life.xlsx")  
+
+
+
+
+
+x = df.iloc[:, :-1].values 
+y = df.iloc[:, -1].values  
+
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=10)
+
+
+
+transfer = StandardScaler()  
+x_train = transfer.fit_transform(x_train)
+x_test = transfer.transform(x_test)
+
+
+data_ys = {}  
+data_metrics = {}  
+def gaussian_model():  
+    kernel = C(1, (0.01, 10)) * RationalQuadratic(alpha=0.5, length_scale_bounds=(0.1, 2000))
+    model = GaussianProcessRegressor(kernel=kernel,alpha=0.01, n_restarts_optimizer=10)
+    return model
+
+def svr_model():  
+    kwargs = {'C': 1000.0, 'cache_size': 200, 'coef0': 0.0, 'degree': 4, 'epsilon': 0.001, 'gamma': 0.1, 'kernel': 'rbf', 'max_iter': -1, 'shrinking': True, 'tol': 0.001, 'verbose': False}
+    model = SVR(**kwargs)
+    return model
+
+def random_forest_model():  
+    model = RandomForestRegressor( bootstrap =True, ccp_alpha =0.0, criterion ='squared_error', max_depth =None, max_features =5, max_leaf_nodes =None, max_samples =None, min_impurity_decrease =0.0, min_samples_leaf =1, min_samples_split =2, min_weight_fraction_leaf =0.0, n_estimators =100, n_jobs =None, oob_score =False, random_state =2000, verbose =0, warm_start =False, )
+    
+    
+    return model
+
+
+def linear_model():  
+    model = LinearRegression()
+    return model
+
+def lasso_model():  
+    model = Lasso(alpha=0.01)
+    return model
+
+def ridge_model():  
+    model = Ridge(alpha=0.02)
+    return model
+
+def SGDRegressor_model():  
+    model = SGDRegressor(max_iter=100,random_state=20)  
+    return model
+
+def MLPRegressor_model():  
+    model = MLPRegressor(random_state=20,alpha=0.4,hidden_layer_sizes=(100,120,100,10000))  
+    return model
+models = { 
+    "GPR" : gaussian_model,
+    "SVR" : svr_model,
+    "RF"  : random_forest_model,
+    "LR"  : linear_model,
+    "L1"  : lasso_model,
+    "L2"  : ridge_model,
+    "SGDR"  : SGDRegressor_model,
+    "MLP" : MLPRegressor_model 
+}
+
+for name, model in models.items():  
+    m_model = model() 
+
+    m_model.fit(x_train, y_train)   
+    y_predict = m_model.predict(x_test)
+    data_ys[name] = y_predict.tolist() 
+    
+    R2 = r2_score(y_test,y_predict) 
+    MAPE = mean_absolute_percentage_error(y_test,y_predict)
+    MSE = mean_squared_error(y_test,y_predict) 
+    data_metrics[name] = { 
+        'R2': R2,
+        'MAPE': MAPE,
+        'MSE': MSE,
+    }
+df_ys = pd.DataFrame(data_ys)
+df_ys.index = y_test
+df_metrics = pd.DataFrame(data_metrics)
+df_metrics=df_metrics.T
+
+
+fig, axs = plt.subplots(1, 4, figsize=(20, 4), dpi=100)
+ax = axs[0]
+for name, item in df_ys.items():
+    ax.scatter(item.index, item, label=name)
+ax.plot([1, 1e8], [1, 1e8])
+ax.grid(True, linestyle="--", alpha=0.5)
+ax.legend()
+ax.set_xlabel("tested life（h）")
+ax.set_ylabel("predicted life（h）")
+ax.set_title("Creep life prediction", fontsize=10)
+ax.set_xlim(1,100000)
+ax.set_ylim(1,100000)
+ax.set_xscale('log')
+ax.set_yscale('log')
+
+
+titles = {
+    'R2': '$R^2$ (coefficient of determination)',
+    'MAPE': 'MAPE (Mean Absolute Percentage Error)',
+    'MSE': 'MSE (Mean Squared Error)',
+}
+
+ax_others = [axs[1], axs[2], axs[3]]
+for ax, (name, item) in zip(ax_others, df_metrics.items()):
+    ax.bar(item.index, item,)
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.set_xlabel("models")
+    ax.set_ylabel("values")
+    ax.set_title(titles[name], fontsize=10)
