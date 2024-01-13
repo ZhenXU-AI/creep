@@ -1,0 +1,345 @@
+#=============================================
+#=============================================
+######---RDL100蠕变数据的前处理
+#1，
+#2，打开文件选择框，列出基本要求修改的参数，先把一个.01D读取，这个文件类似于.txt文件。按制表符分列。新建excel文件，
+# 找到有效数据的起始位置，
+#3，提取开始蠕变的数据行，（时间，变形1-8）。
+#4，每一列的数据减去该列的第一个数值，
+#5，变形数据除以高度，得到应变
+#6，应变中大于strain_threshold的数据设置为0，时间中大于time_threshold的数据设置为0
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import tkinter as tk
+import matplotlib.pyplot as plt
+from tkinter import filedialog
+import matplotlib as mpl
+
+mpl.rcParams['axes.unicode_minus'] = False  # 解决负号'-'显示为方块的问题
+
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#需要修改的参数都在这
+smooth_frac = [0.13]#数据平滑因子
+point_number = 500#数据点数
+strain_threshold = 100#应变门槛(%)，大于这个应变的数据去掉
+time_threshold = 5000#时间门槛(h)，大于这个时间的数据去掉
+temperature = 650#实验温度℃
+load = 7.07 #实验载荷kN
+Stress = [80]#实验的应力MPa
+H = [25]#试样的标距mm
+
+
+
+
+
+
+# smooth_frac = [0.02]  #平滑因子，每一根曲线的平滑因子不同，后面平滑处理用到的参数
+# point_number = 500  #设置点数
+# strain_threshold = 50  #设置应变的门槛值，大于这个值就去掉
+# time_threshold = 5000  #单位h,设置时间的门槛值，大于这个值就去掉
+# #定义加载温度℃，应力MPa,力kN,和试样的直径mm，高度mm
+# temperature = 1000  #单位℃，后面存储到excel中会用到“注释”
+# load = 2.945  #单位kN,后面筛选有效蠕变起始数据点时会用到
+# Stress = [150]  #后面存储到excel中会用到“注释”
+# #直径D数组,单位是mm
+# # D = [4.77]#目前没有用到这些数据
+# #高度H的数组,单位是mm
+# H = [7.5]  #后面计算应变的时候会用到
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# 弹出文件选择框，选择01D文件
+root = tk.Tk()
+root.withdraw()
+file_path = filedialog.askopenfilename()
+
+
+
+##新建一个txt，存储优化后的参数
+txt_file_name = f"RDL100_auto_{temperature}℃_{Stress[0]}MPa优化调参.txt"
+txt_file_path = file_path[:file_path.rfind('/') + 1] + txt_file_name
+with open(txt_file_path, 'w') as f:
+    f.write(f"smooth_frac = {smooth_frac}#数据平滑因子\n")
+    f.write(f"point_number = {point_number}#数据点数\n")
+    f.write(f"strain_threshold = {strain_threshold}##应变门槛(%)，大于这个应变的数据去掉\n")
+    f.write(f"time_threshold = {time_threshold}#时间门槛(h)，大于这个时间的数据去掉\n")
+    f.write(f"temperature = {temperature}#实验温度℃\n")
+    f.write(f"load = {load}#实验载荷kN\n")
+    f.write(f"Stress = {Stress}#实验的应力MPa\n")
+    f.write(f"H = {H}#试样的标距mm\n")
+####--------------------------- 
+
+
+
+
+
+
+
+
+
+#新建一个excel，名字带参数
+# Construct the new file name
+new_file_name = f"RDL100_auto_{temperature}℃_{Stress[0]}MPa.xlsx"
+# Combine the new file name with the directory path to create the full file path
+new_file_path = file_path[:file_path.rfind('/') + 1] + new_file_name
+writer = pd.ExcelWriter(new_file_path)
+####---------------------------
+
+# 读取.01D文件并分列
+df1 = pd.read_csv(file_path, delimiter=',', header=None)
+
+#寻找有效数据
+#数据框中第 i 行、第 3 列的值如果大于设定值load,
+for i in range(len(df1)):
+    #如果力值达到设定值
+    if df1.iloc[i, 3] > load:
+        print(f'第{i+1}行之后是有效数据')
+        break
+
+#分别提取第i到最后一行，第16、7列的数据
+df2 = df1.iloc[i:, [16, 7]]
+
+# 每一列的数据减去该列的第一个数值，保存到新的df2
+for col in df2.columns:
+    df2[col] = df2[col] - df2.iloc[0, df2.columns.get_loc(col)]
+print(df2)
+# df2的2列除以高度H数组,得到应变的值，单位是%。
+df2.iloc[:, 1] = df2.iloc[:, 1].div(H[0]) * 100
+#选取 df2 中第2到9列的数据，如果其中的某个值大于strain_threshold，则将该值设置为0
+df2.iloc[:, 1] = df2.iloc[:, 1].where(df2.iloc[:, 1] <= strain_threshold, 0)
+#选取 df2 中第2到9列的数据，如果df2第一列的值大于70，则将df2 中第2到9列的数据值设置为0，
+df2.iloc[:, 1] = df2.iloc[:, 1].where(df2.iloc[:, 0] <= time_threshold, 0)
+
+######---RDL100-蠕变数据的后处理
+#=============================================
+#=============================================
+# 1. 将处理后的数据读取为时间time和应变strain
+# 2. 绘制一个图，图中画出8条的时间-应变曲线图，线宽为0.5，命名为原始时间-应变曲线图。
+# 3. 分别对每一条曲线进行平滑处理，平滑函数为LOWESS，frac=0.15。平滑后，依据曲线的strain最大值对应的time值，每在曲线上time等距取150个点，将得到的新数据（所有的time和strain数据)
+# 4. 将得到的新数据，即所有的平滑后的5000个点，time和strain数据.
+# 5. 将平滑数据进行微分，微分后的数据存储在EXCEL中sheet2
+# 6. 另外分别绘制8个time-strain曲线图，每一个曲线图包括原始数据和叠加平滑以后的数据，绘制微分后的time—strain rate曲线图,strain-strain rate曲线图
+
+# 获取时间和应变数据
+time = df2.iloc[:, 0].values
+strain = df2.iloc[:, 1].values
+
+
+
+# 处理NaN和Inf值
+strain = np.nan_to_num(strain,
+                       nan=0,
+                       posinf=np.max(strain),
+                       neginf=np.min(strain))
+time = np.nan_to_num(time, nan=0, posinf=np.max(time), neginf=np.min(time))
+
+# 绘制原始数据图
+fig, ax = plt.subplots(figsize=(6, 6))
+ax.set_title(f'{temperature}℃ raw time-strain curve')
+ax.set_xlabel('Time(h)')
+ax.set_ylabel('Strain(%)')
+ax.set_xlim(0, time[-1] * 1.1)
+ax.set_ylim(0, np.max(strain) * 1.1)
+
+mask = np.where(strain != 0, True, False)  # 去掉strain中为零的数
+ax.plot(time[mask], strain[mask], label=f'{Stress[0]}MPa', lw=1)
+
+ax.legend()
+plt.show()
+
+# 对每条曲线进行平滑处理 + 等距取point_number个点 + 写入excel + 绘制原始和平滑对比曲线 +
+#新建4个全0数组，每个数组有8列
+new_time = np.zeros((point_number, 1))
+new_strain = np.zeros((point_number, 1))
+new_time_new = np.zeros((point_number - 1, 1))
+new_strain_new = np.zeros((point_number - 1, 1))
+minimum_result = np.zeros((1, 4))#存放最小蠕变速率数组
+
+for i in range(1):
+    #平滑处理每一根曲线，平滑后按照point_number等距差值取点
+    mask = np.where(strain != 0, True, False)  #mask 数组筛选出 strain 数组中非零元素所在的位置
+    lowess = sm.nonparametric.lowess(strain[mask],
+                                     time[mask],
+                                     frac=smooth_frac[0])  #平滑处理
+    new_time[:, i] = np.linspace(time[mask][0], time[mask][-1],
+                                 point_number)  #平滑后的时间存储在new_time中
+    new_strain[:, i] = np.interp(new_time[:, i], lowess[:, 0],
+                                 lowess[:, 1])  #平滑后的应变存储在new_strain中
+
+    ####==================================
+    #Smooth及微分处理后，将处理后的数据整理写入excel表格中
+    # 对曲线进行微分处理
+    strain_rate = np.diff(new_strain[:, i]) / np.diff(
+        new_time[:, i]) / 100 / 3600  #微分处理平滑后的应变存储在strain_rate中
+    diff_time = (new_time[:-1, i] +
+                 new_time[1:, i]) / 2  #微分处理平滑后的时间存储在diff_time中
+    # 微分后的数据及其他数据整理到数组df_diff中
+    new_time_new[:, i] = new_time[:(point_number - 1),
+                                  i]  #将数组调整为长度与后面微分后长度一致的数组,否则后面无法合并数组
+    new_strain_new[:, i] = new_strain[:(point_number - 1),
+                                      i]  #将数组调整为长度与后面微分后长度一致的数组,否则后面无法合并数组
+
+    df_diff = pd.DataFrame({
+        'new_time_1': new_time_new[:, i],
+        'new_strain_1': new_strain_new[:, i],
+        'new_time_2': diff_time,
+        'strain_rate_2': strain_rate,
+        'new_strain_3': new_strain_new[:, i],
+        'strain_rate_3': strain_rate,
+        '空白': "",
+    })
+    #撰写表头
+    head = [
+        ['Time', 'Strain', 'Time', 'Creep rate', 'Strain', 'Creep rate',
+         ' '],  #第一行名称表头
+        ['h', '%', 'h', '/s', '%', '/s', ''],  #第二行单位表头
+        [
+            f'{temperature} ℃', f'{Stress[i]} MPa', f'{temperature} ℃',
+            f'{Stress[i]} MPa', f'{temperature} ℃', f'{Stress[i]} MPa', ''
+        ],  #第三行应力条件表头
+        [],  #第四行空白
+        [0, 0, 0, "", 0, ""]
+    ]  #第五行设置起始点都是0
+    #将表头插入到原来的数组中插入前四行
+    df_diff = pd.DataFrame(head + df_diff.values.tolist())
+    #将整理好的数组写入excel的sheet1中
+    df_diff.to_excel(writer,
+                     sheet_name='SmoothData',
+                     startrow=0,
+                     startcol=7 * i + 1,
+                     header=None,
+                     index=None)
+    
+    
+    #===============
+    # 找出最小的蠕变速率，提取最小蠕变速率对应的时间和应变
+    minimum_number = strain_rate.argmin()
+    # 提取应力，最小蠕变速率，及对应的时间，应变放在minimum_result二维数组中
+    minimum_result[i] = [Stress[i], strain_rate[minimum_number], diff_time[minimum_number], new_strain_new[minimum_number,i]]
+    #===================
+    
+    
+
+    #绘制3个子图
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+
+    # 第一个子图time-strain(raw data和smooth data)
+    axs[0].plot(time[mask],
+                strain[mask],
+                lw=0.5,
+                label='Raw data',
+                color='blue')
+    axs[0].plot(new_time[:, i],
+                new_strain[:, i],
+                lw=0.5,
+                label='Smooth data',
+                color='red')
+    axs[0].set_title(f'{temperature}℃/{Stress[i]}MPa time-strain curve')
+    axs[0].set_xlabel('Time (h)')
+    axs[0].set_ylabel('Strain (%)')
+    axs[0].set_xlim(0, new_time[-1, i] * 1.1)
+    mask = np.where(strain != 0, True, False)
+    axs[0].set_ylim(0, np.max(strain[mask]) * 1.1)
+    axs[0].legend()
+
+    # 第二个子图time-strain rate
+    axs[1].plot(diff_time, strain_rate, lw=1)
+    axs[1].set_xlabel('Time (h)')
+    axs[1].set_ylabel('Creep rate (/s)')
+    axs[1].set_title(f'{temperature}℃/{Stress[i]}MPa time-creep rate curve')
+    axs[1].set_xlim(diff_time[0], diff_time[-1])
+    axs[1].set_yscale('log')
+    axs[1].set_ylim(1e-10, 1e-2)
+    axs[1].set_xlim(0, new_time[-1, i] * 1.1)
+
+    # 第三个子图strain-strain rate
+    axs[2].plot(
+        new_strain_new[:, i],
+        strain_rate,
+        lw=1,)
+    axs[2].set_xlabel('Strain (%)')
+    axs[2].set_ylabel('Creep rate (/s)')
+    axs[2].set_title(f'{temperature}℃/{Stress[i]}MPa strain-creep rate curve')
+    axs[2].set_yscale('log')
+    axs[2].set_ylim(1e-10, 1e-2)
+    axs[2].set_xlim(0, np.max(new_strain_new[:, i]) * 1.1)  #设置一下x轴的范围
+
+    plt.show()
+
+    
+ 
+#======================================
+#将 MinimumRate 最小蠕变速率写入Excel中的sheet中
+#撰写表头
+head = [['Stress', 'Minimum creep rate', 'Time', 'Strain', ],  # 第一行名称表头
+        ['MPa', '/s', 'h', '%', ],  # 第二行单位表头
+        [f'{temperature} ℃', f'{temperature} ℃', f'{temperature} ℃', f'{temperature} ℃', ],  # 第三行温度条件表头
+        [], ]  # 第四行空白
+#将表头插入到原来的数组中插入前四行，并写入excel
+minimum_result_list = minimum_result.tolist()#将 minimum_result 转换为列表才能相加
+df5 = pd.DataFrame(head + minimum_result_list)
+df5.to_excel(writer, sheet_name='MinmumRate', startrow=0, header=None, index=None)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+##===========================
+#写入MachineLearning到excel
+#整理时间-应变-温度-应力数据写入excel便于机器学习
+#新建一个Stress的数组，列数跟point_number-1相同
+Stress_new = np.tile(Stress, (point_number, 1))
+#Stress的数组按列展平为一维
+Stress_one = np.ravel(Stress_new, order='F')
+# 使用ravel函数将数组按列展平为一维
+new_time_new = np.insert(new_time_new, 0, values=0, axis=0)  #在所有time的的第一行都插入0值
+new_time_one = np.ravel(new_time_new, order='F')  #time的数组按列展平为一维
+new_strain_new = np.insert(new_strain_new, 0, values=0,
+                           axis=0)  #在所有strain的的第一行都插入0值
+new_strain_one = np.ravel(new_strain_new, order='F')  #strain的数组按列展平为一维
+# 使用reshape函数将展平后的数组重新变形为列向量
+new_time_one = np.reshape(new_time_one, (-1, 1))  #将一维数组new_time_one按列重新排列成二维数组
+new_strain_one = np.reshape(new_strain_one,
+                            (-1, 1))  #将一维数组new_strain_one按列重新排列成二维数组
+Stress_one = np.reshape( Stress_one,(-1, 1))  #将一维数组Stress_one按列重新排列成二维数组，其中(-1, 1)表示数组的形状为一个列向量，即列数为1，行数由函数自动确定
+
+#将列向量合并，写入excel，便于后续的machine learning
+df4 = pd.concat([
+    pd.DataFrame(Stress_one),
+    pd.DataFrame(new_time_one),
+    pd.DataFrame(new_strain_one)
+],
+                axis=1)
+df4.insert(loc=0, column='', value=temperature)
+df4.columns = ['temperature(℃)', 'Stress(MPa)', 'Time(h)', 'Strain(%)']
+
+df4.to_excel(writer,
+             sheet_name='MachineLearningData',
+             startrow=0,
+             header=True,
+             index=None)
+
+
+##===========================
+#将平raw data写入Excel中的sheet2中
+#撰写表头
+head = [
+    ['Time', 'Strain'],  #第一行名称表头
+    ['h', '%'],  #第二行单位表头
+    [f'{temperature} ℃', f'{Stress[0]} MPa'],  #第三行应力条件表头
+    [],
+]  #第四行空白
+#将表头插入到原来的数组中插入前四行，并写入excel
+df3 = pd.DataFrame(head + df2.values.tolist())
+df3.to_excel(writer, sheet_name='RawData', startrow=0, header=None, index=None)
+
+writer.save()  #保存excel
+writer.close()  #关闭excel
