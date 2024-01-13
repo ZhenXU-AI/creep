@@ -1,0 +1,71 @@
+#简单的excel表中两列数据，time-strain数据的平滑处理
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import tkinter as tk
+import matplotlib.pyplot as plt
+from tkinter import filedialog
+
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+
+# 弹出文件选择框，选择Excel文件
+root = tk.Tk()
+root.withdraw()
+file_path = filedialog.askopenfilename()
+
+# 读取Excel文件# 读取Excel文件,前四行是表头，跳过前4行读取数据
+df = pd.read_excel(file_path, sheet_name='Sheet1', skiprows=3, header=None)
+
+# 绘制原始曲线图
+plt.plot(df.iloc[:, 0], df.iloc[:, 1], color='blue', linewidth=0.5)
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.title('time-strain curve')
+
+# 对曲线进行LOWESS平滑
+lowess = sm.nonparametric.lowess(
+    df.iloc[:, 1], df.iloc[:, 0],
+    frac=0.15)  ##调整frac参数来适配不同的曲线形状，低应力低frac,高应力高frac
+smoothed_df = pd.DataFrame(lowess, columns=['X', 'Y'])
+# 取等x距150个点
+step_size = (smoothed_df['X'].max() - smoothed_df['X'].min()) / 150
+x_values = [smoothed_df['X'].min() + i * step_size for i in range(150)]
+smoothed_values = [
+    smoothed_df.loc[abs(smoothed_df['X'] - x_val) < step_size / 2, 'Y'].mean()
+    for x_val in x_values
+]
+smoothed_df = pd.DataFrame({'X': x_values, 'Y': smoothed_values})
+
+#将平滑后的150点数据放在excel中
+new_file_path = file_path[:file_path.rfind('/') + 1] + 'newwwwwexcel.xlsx'
+writer = pd.ExcelWriter(new_file_path)
+smoothed_df.to_excel(writer,
+                     sheet_name='Sheet1',
+                     startrow=3,
+                     startcol=3,
+                     header=None,
+                     index=None)
+writer.save()
+
+# 关闭excel,否则excel一直被程序使用，导致无法删除
+writer.close()
+
+# 绘制平滑后的曲线图
+plt.figure()
+plt.plot(df.iloc[:, 0],
+         df.iloc[:, 1],
+         color='blue',
+         linewidth=0.5,
+         label='原始数据')
+plt.plot(smoothed_df['X'],
+         smoothed_df['Y'],
+         color='red',
+         linewidth=0.5,
+         label='平滑数据')
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.title('time-strain curve')
+
+# 显示图形
+plt.show()
