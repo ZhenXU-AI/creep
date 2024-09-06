@@ -1,3 +1,5 @@
+
+import json
 import pandas as pd  
 import numpy as np  
 import math   
@@ -6,117 +8,169 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import StandardScaler  
 from sklearn.manifold import TSNE  
 from sklearn.decomposition import PCA  
+from sklearn.feature_selection import SelectFromModel  
 import matplotlib.pyplot as plt  
+import seaborn as sns 
 plt.rcParams['font.sans-serif'] = ['SimHei']  
-plt.rcParams['axes.unicode_minus'] = False  
-from sklearn.model_selection import GridSearchCV 
-from sklearn.model_selection import RandomizedSearchCV 
-
-
-
-
-from sklearn.gaussian_process import GaussianProcessRegressor
+plt.rcParams['axes.unicode_minus'] = False  from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RationalQuadratic, WhiteKernel, RBF
-from sklearn.gaussian_process.kernels import ConstantKernel as C
-
-from sklearn.svm import SVR
-
-from sklearn.ensemble import RandomForestRegressor
-
-from sklearn.linear_model import LinearRegression
-
-from sklearn.linear_model import Lasso
-
-from sklearn.linear_model import Ridge
-
-from sklearn.linear_model import SGDRegressor
-
-from sklearn.neural_network import  MLPRegressor
-
-
+from sklearn.gaussian_process.kernels import ConstantKernel as Cfrom sklearn.svm import SVRfrom sklearn.ensemble import RandomForestRegressorfrom sklearn.linear_model import LinearRegressionfrom sklearn.linear_model import Lassofrom sklearn.linear_model import Ridgefrom sklearn.linear_model import SGDRegressorfrom sklearn.neural_network import MLPRegressorfrom sklearn.neighbors import KNeighborsRegressorfrom sklearn.tree import DecisionTreeRegressorfrom sklearn.ensemble import GradientBoostingRegressorfrom sklearn.ensemble import AdaBoostRegressorfrom sklearn.ensemble import ExtraTreesRegressorfrom sklearn.ensemble import BaggingRegressorfrom xgboost import XGBRegressorfrom lightgbm import LGBMRegressorfrom catboost import CatBoostRegressorfrom sklearn.linear_model import ElasticNetfrom sklearn.kernel_ridge import KernelRidgefrom sklearn.linear_model import RidgeCV, LassoCVfrom sklearn.linear_model import OrthogonalMatchingPursuitfrom sklearn.linear_model import BayesianRidge
 from sklearn.metrics import mean_squared_error 
 from sklearn.metrics import mean_absolute_error 
 from sklearn.metrics import r2_score 
-from sklearn.metrics import mean_absolute_percentage_error
-
-df = pd.read_excel("F:/JupyterXU/all_machine_learning_data/test_data-creep life.xlsx")  
-
-
-
-
-
-x = df.iloc[:, :-1].values 
+from sklearn.metrics import mean_absolute_percentage_errorfrom sklearn.model_selection import cross_val_score, RandomizedSearchCV, GridSearchCV
+from sklearn.metrics import make_scorer import pickle 
+import json 
+import collections as c 
+import itertools as it import warnings
+warnings.filterwarnings('ignore')
+df = pd.read_excel("D:/jupyter/all_machine_learning_data/test_data-creep life.xlsx", sheet_name='train-266-acta') 
+X = df.iloc[:, :-1].values  
 y = df.iloc[:, -1].values  
-
-
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, random_state=10)
-
-
-
-transfer = StandardScaler()  
+X_df_columns = df.iloc[:, :-1].columns  
+X_df = pd.DataFrame(X, columns=X_df_columns)
+df_combined = pd.concat([X_df, pd.DataFrame(y, columns=[df.columns[-1]])], axis=1)
+duplicates = df_combined.duplicated(keep='first')  
+duplicate_indices = df_combined[duplicates].indexprint(duplicate_indices)for idx in duplicate_indices:
+    print(df_combined.loc[idx])
+df_unique = df_combined.drop(duplicate_indices)plt.rcParams.update({
+    'font.size': 10,
+    'font.family': 'serif',
+    'font.sans-serif': ['Times New Roman']
+})summary = df.describe()
+print(summary)
+plt.figure(figsize=(20, 10))  for i, column in enumerate(df.columns[:-1]):  
+    plt.subplot(1 + (len(df.columns) - 1) // 5, 5, i + 1)
+    plt.hist(df[column], bins=20, color='blue', alpha=0.7)
+    plt.ylim(0, 300) 
+    plt.title(column)plt.tight_layout()
+plt.show()plt.figure(figsize=(10, 6))
+sns.boxplot(data=df.iloc[:, :-1], orient='h')  
+plt.title('Boxplot of Features')
+plt.show()num_features = len(df.columns)-1ncols = 3
+nrows = (num_features + ncols - 1) // ncols  fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(20, 10))  for i, (column, ax) in enumerate(zip(df.columns, axes.flatten())):  
+    sns.boxplot(x=df[column], ax=ax)  
+    
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=0, color='blue')  for ax in axes.flatten()[num_features:]:  
+    ax.set_visible(False)  plt.tight_layout()  
+plt.show()
+selected_features = df.columns[:-1][:5]  
+sns.pairplot(df[selected_features],diag_kind='kde')
+plt.show()
+corr_matrix = df.iloc[:, :-1].corr()
+plt.figure(figsize=(12, 10))
+sns.heatmap(corr_matrix, annot=True, fmt='.2f',cmap="YlGnBu")
+plt.title('Heatmap of Feature Correlations')
+plt.show()
+corr_matrix = df.iloc[:, :-1].corr()
+clustermap = sns.clustermap(corr_matrix, annot=True, fmt='.2f', figsize=(20, 20), cmap="YlGnBu")
+clustermap.fig.suptitle('Heatmap of Feature Correlations', fontsize=16)  
+plt.show()
+plt.figure(figsize=(10, 5))
+sns.histplot(df.iloc[:, -1], kde=True)
+plt.title('Distribution of Target Variable')
+plt.show()
+model = XGBRegressor() 
+model.fit(X, y) importances = model.feature_importances_ 
+features_name = df.columns.tolist()[:-1]
+feature_importances = pd.DataFrame({'feature': features_name, 'importance': importances})feature_importances = feature_importances.sort_values('importance', ascending=False)plt.figure(figsize=(10, 7))  
+plt.barh(feature_importances['feature'], feature_importances['importance'])
+plt.xlabel('Feature Importance')  
+plt.ylabel('Features')  
+plt.title('Feature Importances for XGBoost Model')  
+plt.grid(True)  
+plt.tight_layout()  
+plt.show() threshold = 0.001 
+selector = SelectFromModel(model, threshold=threshold, prefit=True)
+X = selector.transform(X) features_name = df.columns.tolist()  selected_features_idx = selector.get_support(indices=True)feature_names_selected = [features_name[i] for i in selected_features_idx]print("Selected features:", feature_names_selected) x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=10, )transfer = MinMaxScaler()  
 x_train = transfer.fit_transform(x_train)
 x_test = transfer.transform(x_test)
-
-
 data_ys = {}  
 data_metrics = {}  
-def gaussian_model():  
-    kernel = C(1, (0.01, 10)) * RationalQuadratic(alpha=0.5, length_scale_bounds=(0.1, 2000))
-    model = GaussianProcessRegressor(kernel=kernel,alpha=0.01, n_restarts_optimizer=10)
-    return model
-
-def svr_model():  
-    kwargs = {'C': 1000.0, 'cache_size': 200, 'coef0': 0.0, 'degree': 4, 'epsilon': 0.001, 'gamma': 0.1, 'kernel': 'rbf', 'max_iter': -1, 'shrinking': True, 'tol': 0.001, 'verbose': False}
-    model = SVR(**kwargs)
-    return model
-
-def random_forest_model():  
-    model = RandomForestRegressor( bootstrap =True, ccp_alpha =0.0, criterion ='squared_error', max_depth =None, max_features =5, max_leaf_nodes =None, max_samples =None, min_impurity_decrease =0.0, min_samples_leaf =1, min_samples_split =2, min_weight_fraction_leaf =0.0, n_estimators =100, n_jobs =None, oob_score =False, random_state =2000, verbose =0, warm_start =False, )
-    
-    
-    return model
-
-
-def linear_model():  
-    model = LinearRegression()
-    return model
-
-def lasso_model():  
-    model = Lasso(alpha=0.01)
-    return model
-
-def ridge_model():  
-    model = Ridge(alpha=0.02)
-    return model
-
-def SGDRegressor_model():  
-    model = SGDRegressor(max_iter=100,random_state=20)  
-    return model
-
-def MLPRegressor_model():  
-    model = MLPRegressor(random_state=20,alpha=0.4,hidden_layer_sizes=(100,120,100,10000))  
-    return model
-models = { 
-    "GPR" : gaussian_model,
-    "SVR" : svr_model,
-    "RF"  : random_forest_model,
-    "LR"  : linear_model,
-    "L1"  : lasso_model,
-    "L2"  : ridge_model,
-    "SGDR"  : SGDRegressor_model,
-    "MLP" : MLPRegressor_model 
+best_estimator_list = {}  
+best_model_list = {}  pd.DataFrame(x_train)pd.DataFrame(transfer.inverse_transform(x_train))models = {     "XGBR" : XGBRegressor(),
+    }parameters = {
+    "XGBR": dict( learning_rate=[0.01, 0.05, 0.1, 0.15, 0.2], max_depth=[3, 4, 5, 6, 7, 8], n_estimators=[100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], colsample_bytree=[0.3, 0.4, 0.5, 0.7], reg_alpha=[0, 0.05, 0.1, 0.001, 0.005], reg_lambda=[1, 0.1, 0.01, 0.5, 0.001],),
+    "ETR": dict(n_estimators=[10, 50, 100, 200], max_depth=[2, 4, 6, 8], min_samples_split=[2, 4, 6, 8]),
+    "GBR" : dict( learning_rate = [0.1, 0.05, 0.02, 0.01], n_estimators = [100, 250, 500],max_depth = [1, 2, 3, 4, 5], min_samples_leaf=[1, 2, 4], ),
+    "RF"  : dict(bootstrap=[True, False],random_state=[2000], max_depth=[5],  min_samples_split= [2],min_samples_leaf = [1],n_estimators=[100],oob_score=[False],warm_start=[False],),
+    "CBR": dict( learning_rate=[0.03, 0.1, 0.15, 0.2], depth=[4, 5, 6, 7, 8, 9, 10], l2_leaf_reg=[1, 3, 5, 7, 9], iterations=[100, 500, 1000, 2000], bagging_temperature=[0, 1, 5], random_strength=[0, 1, 5, 10], border_count=[32, 64, 128],), 
+    "SVR": dict(kernel=['rbf', 'poly', 'linear'], gamma=[0.0001, 0.001, 0.01, 0.1, 1, 10, 'scale', 'auto'], C=[0.01, 0.1, 1, 10, 100, 1000], epsilon=[0.0001, 0.001, 0.01, 0.1], shrinking=[True, False], degree=[2, 3, 4], coef0=[0, 0.1, 1, -1], max_iter=[-1, 1000, 10000]),
+    "LR"  : dict( fit_intercept=[True, False],positive=[True, False],),
+    "L1"  : dict( alpha=np.linspace(1, 10, 10), fit_intercept=[True, False],precompute=[True, False], max_iter= [2000, 100, 10], tol= [0.001, 0.01, 0.1], warm_start= [True, False], positive= [True, False],),
+    "L2": dict(alpha=np.logspace(-4, 1, 10), fit_intercept=[True, False], tol=[1e-4, 1e-3, 1e-2, 1e-1, 1], solver=['svd', 'lsqr', 'eigen', 'sag', 'saga'], max_iter=[1000, 2000, 3000, 4000]),
+    "MLP" : dict( hidden_layer_sizes=[200, 100, 50], max_iter=[2000],random_state=[0]),
+    "KNN": dict(n_neighbors=[5, 7], leaf_size=[20, 30, 40], p=[1, 2, 4] ),
+    "DTR": dict( max_depth=[ 3, 4, 5], min_samples_leaf=[2, 4, 8, 16], splitter=['best', 'random']),
+    "LGBM": dict( learning_rate=[0.05, 0.1, 0.2], n_estimators=[50, 100, 200], max_depth=[5, 10, 20, -1], num_leaves=[31, 63, 127], min_child_samples=[20, 50, 100], subsample=[0.6, 0.8, 1.0], colsample_bytree=[0.6, 0.8, 1.0], reg_alpha=[0, 1, 10, 50, 100], reg_lambda=[0, 1, 10, 50, 100], min_split_gain=[0.0, 0.1, 0.5],),
+    "ABR": dict(n_estimators=[50, 100, 200], learning_rate=[0.1, 0.05, 0.02, 0.01], loss=['linear', 'square', 'exponential']),
+    "BR": dict(n_estimators=[int(x) for x in np.linspace(1,20,10)], max_samples=np.linspace(0.1,1.0,10), max_features=np.linspace(0.1,1.0,10),random_state=[2000],),
+    "KRR": dict(alpha=np.logspace(-5, 1, 100), kernel=["linear", "rbf", "polynomial", "sigmoid"], gamma=["scale", "auto", None], ),
+    "OMP": dict(n_nonzero_coefs=np.arange(1, 10)),
+    "BRR": dict(alpha_1=np.logspace(-10, 0, 100), alpha_2=np.logspace(-10, 0, 100), lambda_1=np.logspace(-10, 0, 100), lambda_2=np.logspace(-10, 0, 100)),
+    "LCV": dict(eps=[0.001, 0.01], n_alphas=[100, 200, 300],  fit_intercept=[True, False], precompute=['auto', False], max_iter=[1000, 2000, 3000], tol=[1e-4, 1e-3, 1e-2], cv=[5, 10], verbose=[False, True], n_jobs=[None, -1], positive=[False], random_state=[42], selection=['cyclic', 'random']),
+    "GPR": dict( alpha=np.logspace(1e-10, 0.1, 100), normalize_y=[True, False], n_restarts_optimizer=np.linspace(1, 20, 10).astype(int), random_state=[True, False],),
+    "SGDR" : dict( alpha = np.linspace(0.0001, 0.001, 10), l1_ratio = np.linspace(0.05, 0.5, 10), max_iter = np.linspace(1000, 10000, 10).astype(int),tol=np.linspace(0.001, 0.01, 10), power_t=np.linspace(0.05, 0.5, 10), early_stopping=[True, False], validation_fraction= np.linspace(0.05, 0.5, 10),  n_iter_no_change= np.linspace(1, 10, 10).astype(int), warm_start=[True, False], average= [True, False], shuffle=[True, False],epsilon= np.linspace(0.001, 0.01, 10),),
 }
-
-for name, model in models.items():  
-    m_model = model() 
-
-    m_model.fit(x_train, y_train)   
-    y_predict = m_model.predict(x_test)
-    data_ys[name] = y_predict.tolist() 
-    
-    R2 = r2_score(y_test,y_predict) 
+for (name, model), (name, parameters_P) in zip(models.items(), parameters.items()):      best_model_list[name] = RandomizedSearchCV(estimator=model, param_distributions=parameters_P, scoring=r2_score, cv=5, n_jobs=None, random_state=42)
+    best_model_list[name].fit(x_train, y_train)
+    best_estimator_list[name] = best_model_list[name].best_estimator_    y_predict = best_model_list[name].predict(x_test)
+    data_ys[name] = y_predict.tolist()    R2 = r2_score(y_test,y_predict) 
     MAPE = mean_absolute_percentage_error(y_test,y_predict)
     MSE = mean_squared_error(y_test,y_predict) 
+    data_metrics[name] = { 
+        'R2': R2,
+        'MAPE': MAPE,
+        'MSE': MSE,
+    }
+    with open('all_models_best_estimator_list-creep life.pkl', 'wb') as f:
+    pickle.dump(best_estimator_list, f) df_ys = pd.DataFrame(data_ys)
+df_ys.index = y_test
+df_metrics = pd.DataFrame(data_metrics)
+df_metrics=df_metrics.Tparams = model.get_params()
+print(params)best_estimator_list
+fig, axs = plt.subplots(1, 4, figsize=(25, 4), dpi=100)
+plt.subplots_adjust(hspace=2,wspace=0.7) ax = axs[0]
+for name, item in df_ys.items():
+    ax.scatter(item.index, item, label=name, )
+ax.plot([1, 1e8], [1, 1e8])
+ax.grid(True, linestyle="--", alpha=0.5)
+ax.legend()
+ax.legend(bbox_to_anchor=(1.04,1), loc='upper left', borderaxespad=0, ncol=1,prop={'size': 10}, handlelength=1.5, handleheight=0.8)
+ax.set_xlabel("tested life(h)")
+ax.set_ylabel("predicted life(h)")
+ax.set_title("Creep life prediction", fontsize=10)
+ax.set_xlim(1,1e5)
+ax.set_ylim(1,1e5)
+ax.set_xscale('log')
+ax.set_yscale('log')titles = {
+    'R2': '$R^2$ (coefficient of determination)',
+    'MAPE': 'MAPE (Mean Absolute Percentage Error)',
+    'MSE': 'MSE (Mean Squared Error)',
+}ax_others = [axs[1], axs[2], axs[3]]axs[1].set_ylim(0, 1)
+axs[2].set_ylim(0, 5)
+axs[3].set_ylim(1000, 10000000)
+axs[3].set_yscale('log')for ax, (name, item) in zip(ax_others, df_metrics.items()):
+    ax.bar(item.index, item,)
+    ax.grid(True, linestyle="--", alpha=0.5)
+    ax.set_xticklabels(item.index, rotation=90)
+    ax.set_xlabel("models")
+    ax.set_ylabel("values")
+    ax.set_title(titles[name], fontsize=10)writer = pd.ExcelWriter('D:/jupyter/all_machine_learning_data/寿命预测导出的绘图数据1.xlsx', engine='xlsxwriter')
+df_ys.to_excel(writer, sheet_name='creep_life_test&predicted')
+df_metrics.to_excel(writer, sheet_name='models validation')
+writer.save()pd.DataFrame(data_metrics)pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
+pd.set_option('display.max_colwidth', None)
+print(pd.DataFrame(data_metrics))
+with open('all_models_best_estimator_list-creep life.pkl','rb') as f:
+    best_estimator_list = pickle.load(f)  
+    for name, best_model in best_estimator_list.items():
+    y_predict_ = best_model.predict(x_test)
+    data_ys[name] = y_predict_.tolist()    R2 = r2_score(y_test,y_predict_) 
+    MAPE = mean_absolute_percentage_error(y_test,y_predict_)
+    MSE = mean_squared_error(y_test,y_predict_) 
     data_metrics[name] = { 
         'R2': R2,
         'MAPE': MAPE,
@@ -126,34 +180,149 @@ df_ys = pd.DataFrame(data_ys)
 df_ys.index = y_test
 df_metrics = pd.DataFrame(data_metrics)
 df_metrics=df_metrics.T
-
-
-fig, axs = plt.subplots(1, 4, figsize=(20, 4), dpi=100)
-ax = axs[0]
-for name, item in df_ys.items():
-    ax.scatter(item.index, item, label=name)
+fig, axs = plt.subplots(1, 4, figsize=(25, 4), dpi=100)
+plt.subplots_adjust(hspace=0.9,wspace=0.7) 
+ax = axs[0]colors = ['#FF0000', '#0000FF', '#008000', '#B22222', '#FF00FF', '#00005B',
+            '#FFA500', '#800080', '#A52A2A', '#FF1493', '#00CED1', '#9400D3',
+            '#4B0082', '#1E90FF', '#32CD32', '#006400', '#800000', '#FF0000',
+            '#808000', '#008080', '#00005B', '#00FF00', '#00008B', '#FF69B4']markers = ['o', 's', 'D', '^', 'v', '>', '<', 'p', '*', 'h', 'H', 'P', 'P', 'd', 'o', 's', 'D', '^', 'v', '>', '<', 'p', '*', 'h', 'H', '+', 'x', 'd']for i, (name, item) in enumerate(df_ys.items()):  
+    ax.scatter(item.index, item, label=name, color=colors[i], facecolors='none', marker=markers[i],)  
 ax.plot([1, 1e8], [1, 1e8])
 ax.grid(True, linestyle="--", alpha=0.5)
-ax.legend()
-ax.set_xlabel("tested life（h）")
-ax.set_ylabel("predicted life（h）")
+ax.legend(bbox_to_anchor=(1.04,1),  loc='upper left',borderaxespad=0, ncol=2,prop={'size': 10}, handlelength=1.5, handleheight=0.8)
+ax.set_xlabel("tested life(h)")
+ax.set_ylabel("predicted creep life(h)")
 ax.set_title("Creep life prediction", fontsize=10)
-ax.set_xlim(1,100000)
-ax.set_ylim(1,100000)
+ax.set_xlim(1,1e5)
+ax.set_ylim(1,1e5)
 ax.set_xscale('log')
-ax.set_yscale('log')
-
-
-titles = {
+ax.set_yscale('log')titles = {
     'R2': '$R^2$ (coefficient of determination)',
     'MAPE': 'MAPE (Mean Absolute Percentage Error)',
     'MSE': 'MSE (Mean Squared Error)',
-}
-
-ax_others = [axs[1], axs[2], axs[3]]
-for ax, (name, item) in zip(ax_others, df_metrics.items()):
+}ax_others = [axs[1], axs[2], axs[3]]
+axs[1].set_ylim(0, 1)  
+axs[2].set_ylim(0, 5)  
+axs[3].set_ylim(1000, 10000000)  
+axs[3].set_yscale('log')  for ax, (name, item) in zip(ax_others, df_metrics.items()):
     ax.bar(item.index, item,)
+    ax.set_xticklabels(item.index, rotation=90)
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.set_xlabel("models")
     ax.set_ylabel("values")
     ax.set_title(titles[name], fontsize=10)
+    best_estimator_list["XGBR"]
+    
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.inspection import PartialDependenceDisplay
+from itertools import combinations
+model = best_estimator_list["XGBR"]pdd = PartialDependenceDisplay.from_estimator(
+    estimator=model, 
+    X=x_train,  
+    kind='both',  
+    features=range(x_train.shape[1]),  
+    feature_names=feature_names_selected  
+)fig, ax = plt.subplots(figsize=(20, 10))  
+pdd.plot(
+    ax=ax,
+    n_cols=4,
+    
+    contour_kw={'colors': ['blue', 'white', 'red']}  
+)
+ax.grid(False) 
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from interpret import show
+from interpret.glassbox import ExplainableBoostingRegressor
+from interpret.perf import RegressionPerf
+import shap
+import itertoolsx_train_df = pd.DataFrame(x_train, columns=feature_names_selected)
+explainer = shap.Explainer(model, x_train_df)shap_values = explainer(x_train_df)
+shap.summary_plot(shap_values, x_train_df, plot_type="bar",color='blue')
+shap.summary_plot(shap_values, x_train_df)
+shap.plots.heatmap(shap_values)Tree_explainer = shap.TreeExplainer(model)  
+shap_interaction_values = Tree_explainer.shap_interaction_values(x_train_df)plt.figure(figsize=(10, 90))
+shap.summary_plot(shap_interaction_values, x_train_df, max_display=8, show=False, plot_size=(10, 90))
+plt.colorbar(label='Up Feature Value')
+plt.show()
+sample_index = 160  
+normalized_features = x_train_df.iloc[sample_index].to_frame().T
+original_features = transfer.inverse_transform(normalized_features)shap_values_sample = shap_values[sample_index].values
+shap_contributions_list = shap_values_sample.flatten().tolist()
+features_df_shapvalue = pd.DataFrame({
+    'Normalized': normalized_features.iloc[0],
+    'Original': original_features[0],
+    'SHAP Contribution': shap_contributions_list  
+}, index=x_train_df.columns)pd.DataFrame(features_df_shapvalue )shap_values_sample = explainer(x_train_df.iloc[sample_index])shap.initjs()  
+shap.force_plot(shap_values[sample_index])plt.figure(figsize=(10, 6))  
+shap.plots.waterfall(shap_values[sample_index])
+plt.show()
+plt.close()
+shap.plots.force(shap_values[0:100])plt.rcParams.update({
+    'font.size': 20,
+    'font.family': 'serif',
+    'font.sans-serif': ['Times New Roman']
+})y_pred = model.predict(x_train_df)def plot_feature_vs_predicted(feature_name):
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x=x_train_df[feature_name], y=y_pred, color='blue')
+    plt.xlabel(feature_name)
+    plt.ylabel("Predicted creep life")
+    plt.show()plot_feature_vs_predicted("Re_wt")
+plot_feature_vs_predicted("Nb_wt")
+plot_feature_vs_predicted("1st_step_aging_treatment_temperature(℃)")
+plot_feature_vs_predicted("Diffusion_coefficien (m2/s)")base_sample = x_train_df.iloc[sample_index].copy()
+def generate_samples_for_feature(feature_name, base_sample, num_samples=100, feature_range=(0, 1)):
+    samples = []
+    feature_values = np.linspace(feature_range[0], feature_range[1], num_samples)
+    for value in feature_values:
+        sample = base_sample.copy()
+        sample[feature_name] = value
+        samples.append(sample)
+    return samples, feature_values
+def plot_fixed_feature_vs_prediction(feature_name, base_sample, feature_range=(0, 1)):
+    samples, feature_values = generate_samples_for_feature(feature_name, base_sample, feature_range=feature_range)
+    sample_df = pd.DataFrame(samples)
+    predictions = model.predict(sample_df)
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x=feature_values, y=predictions, color='red')
+    plt.xlabel(feature_name)
+    plt.ylabel("Predicted creep life")
+    plt.show()
+plot_fixed_feature_vs_prediction("Re_wt", base_sample, feature_range=(0, 1))
+plot_fixed_feature_vs_prediction("Nb_wt", base_sample, feature_range=(0, 1))
+plot_fixed_feature_vs_prediction("1st_step_aging_treatment_temperature(℃)", base_sample, feature_range=(0, 1))
+plot_fixed_feature_vs_prediction("Diffusion_coefficien (m2/s)", base_sample, feature_range=(0, 1))
+import matplotlib.pyplot as plt
+import shap
+explainer = shap.TreeExplainer(model)
+shap_values = explainer.shap_values(x_train_df)
+def plot_shap_dependence(feature_name, interaction_feature):
+    fig, ax = plt.subplots(figsize=(4, 5))  
+    shap.dependence_plot(feature_name, shap_values, x_train_df, interaction_index=interaction_feature, ax=ax)
+    plt.show()plot_shap_dependence("Nb_wt", "Re_wt")
+plot_shap_dependence("Re_wt", "Nb_wt")plot_shap_dependence("Re_wt", "1st_step_aging_treatment_temperature(℃)")
+plot_shap_dependence("Nb_wt", "1st_step_aging_treatment_temperature(℃)")
+import math
+import shap
+import matplotlib.pyplot as plt
+explainer = shap.TreeExplainer(model)
+shap_values = explainer.shap_values(x_train_df)
+num_cols = 7
+num_rows = math.ceil(len(feature_names_selected) * (len(feature_names_selected) - 1) / num_cols)
+fig, axes = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(30, 30))
+feature_pairs = [(f1, f2) for f1 in feature_names_selected for f2 in feature_names_selected if f1 != f2]for ax, (feature1, feature2) in zip(axes.flatten(), feature_pairs):
+    shap.dependence_plot(feature1, shap_values, x_train_df, interaction_index=feature2, ax=ax, show=False)
+for ax in axes.flatten()[len(feature_pairs):]:
+    fig.delaxes(ax)plt.tight_layout()
+plt.show()import pandas as pd
+import numpy as np
+from interpret import show
+from interpret.glassbox import ExplainableBoostingRegressor
+from interpret.perf import RegressionPerf
+import matplotlib.pyplot as pltebm = ExplainableBoostingRegressor()
+ebm.feature_names = feature_names_selected
+ebm.fit(x_train, y_train)reg_perf = RegressionPerf(ebm.predict).explain_perf(x_test, y_test)ebm_global = ebm.explain_global()
+show(ebm_global)show(ebm.explain_local(x_test[:20]))
